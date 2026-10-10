@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KHOJ - Smart Technician Recommendation Platform</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                            900: '#1e1b4b',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-slate-50 text-slate-900 font-sans antialiased min-h-screen flex flex-col justify-between" x-data="khojApp()" x-init="init()">
+
+    <!-- Top Navigation Bar -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3 cursor-pointer" @click="currentView = 'landing'">
+                <div class="bg-brand-600 text-white p-2 rounded-xl flex items-center justify-center shadow-md">
+                    <i data-lucide="wrench" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <span class="text-xl font-bold tracking-tight text-slate-900">KHOJ</span>
+                    <span class="hidden sm:inline-block text-xs font-semibold px-2 py-0.5 bg-brand-50 text-brand-700 rounded-full ml-2">Smart Match v2.4</span>
+                </div>
+            </div>
+
+            <!-- Navigation Links -->
+            <nav class="hidden md:flex items-center space-x-1 lg:space-x-6 text-sm font-medium text-slate-600">
+                <button @click="currentView = 'landing'" :class="currentView === 'landing' ? 'text-brand-600 font-semibold' : 'hover:text-slate-900'" class="transition">Home</button>
+                <button @click="currentView = 'search'" :class="currentView === 'search' ? 'text-brand-600 font-semibold' : 'hover:text-slate-900'" class="transition">Find Technicians</button>
+                <button @click="currentView = 'job-create'" :class="currentView === 'job-create' ? 'text-brand-600 font-semibold' : 'hover:text-slate-900'" class="transition">Post a Job</button>
+                <button @click="currentView = 'matching-results'" :class="currentView === 'matching-results' ? 'text-brand-600 font-semibold' : 'hover:text-slate-900'" class="transition">Matching Engine</button>
+                <template x-if="currentUser">
+                    <div class="flex items-center space-x-4">
+                        <button @click="navigateToDashboard()" class="text-indigo-600 font-semibold hover:underline">Dashboard</button>
+                    </div>
+                </template>
+            </nav>
+
+            <!-- Right Actions: Notifications & Auth -->
+            <div class="flex items-center space-x-3">
+                <!-- Notifications Bell -->
+                <div class="relative" x-data="{ open: false }">
+                    <button @click="open = !open" class="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-full relative transition">
+                        <i data-lucide="bell" class="w-5 h-5"></i>
+                        <template x-if="notifications.filter(n => !n.read).length > 0">
+                            <span class="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center" x-text="notifications.filter(n => !n.read).length"></span>
+                        </template>
+                    </button>
+                    <!-- Notification Dropdown -->
+                    <div x-show="open" @click.away="open = false" class="absolute right-0 mt-2 w-80 bg-white border border-slate-200 rounded-xl shadow-xl py-2 z-50 text-xs">
+                        <div class="px-4 py-2 border-b border-slate-100 flex justify-between items-center font-semibold text-slate-800">
+                            <span>Notifications</span>
+                            <button @click="markAllRead()" class="text-brand-600 hover:underline">Mark all read</button>
+                        </div>
+                        <div class="max-h-64 overflow-y-auto divide-y divide-slate-100">
+                            <template x-for="notif in notifications" :key="notif.id">
+                                <div class="px-4 py-3 hover:bg-slate-50 transition" :class="notif.read ? 'opacity-75' : 'bg-brand-50/40'">
+                                    <p class="font-medium text-slate-900" x-text="notif.title"></p>
+                                    <p class="text-slate-600 mt-0.5" x-text="notif.message"></p>
+                                    <span class="text-[10px] text-slate-400 mt-1 block" x-text="notif.time"></span>
+                                </div>
+                            </template>
+                            <template x-if="notifications.length === 0">
+                                <div class="px-4 py-6 text-center text-slate-400">No notifications</div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- User Profile / Auth State -->
+                <template x-if="!currentUser">
+                    <div class="flex items-center space-x-2">
+                        <button @click="openAuthModal('login')" class="text-sm font-medium text-slate-700 hover:text-brand-600 px-3 py-2 rounded-lg transition">Sign In</button>
+                        <button @click="openAuthModal('signup')" class="text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg shadow-sm transition">Get Started</button>
+                    </div>
+                </template>
+
+                <template x-if="currentUser">
+                    <div class="flex items-center space-x-3 border-l border-slate-200 pl-3">
+                        <div class="text-right hidden sm:block">
+                            <div class="text-xs font-bold text-slate-900" x-text="currentUser.name"></div>
+                            <div class="text-[10px] uppercase tracking-wider font-semibold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded" x-text="currentUser.role"></div>
+                        </div>
+                        <button @click="logout()" title="Logout" class="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition">
+                            <i data-lucide="log-out" class="w-5 h-5"></i>
+                        </button>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+        <!-- 1. LANDING PAGE -->
+        <div x-show="currentView === 'landing'" class="space-y-12">
+            <!-- Hero Banner -->
+            <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-brand-900 text-white rounded-3xl p-8 sm:p-12 shadow-2xl relative overflow-hidden">
+                <div class="absolute -right-12 -bottom-12 w-96 h-96 bg-brand-500/20 rounded-full blur-3xl pointer-events-none"></div>
+                <div class="max-w-2xl space-y-6 relative z-10">
+                    <div class="inline-flex items-center space-x-2 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-3 py-1 rounded-full text-xs font-semibold">
+                        <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+                        <span>AI-Powered Deterministic Technician Matching</span>
+                    </div>
+                    <h1 class="text-4xl sm:text-5xl font-extrabold tracking-tight leading-tight">
+                        Find the <span class="text-indigo-400">Absolute Best Technician</span> for Your Job
+                    </h1>
+                    <p class="text-slate-300 text-base sm:text-lg">
+                        KHOJ matches jobs with verified technicians using multi-factor deterministic scoring based on skills, precise location, live availability, and budget compatibility.
+                    </p>
+                    <div class="flex flex-wrap gap-4 pt-2">
+                        <button @click="currentView = 'job-create'" class="bg-brand-600 hover:bg-brand-500 text-white font-semibold px-6 py-3 rounded-xl shadow-lg transition flex items-center space-x-2">
+                            <span>Post Job Requirement</span>
+                            <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                        </button>
+                        <button @click="currentView = 'search'" class="bg-white/10 hover:bg-white/20 text-white border border-white/20 font-semibold px-6 py-3 rounded-xl transition">
+                            Explore Technicians (10)
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Features Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                    <div class="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-bold">
+                        <i data-lucide="shield-check" class="w-5 h-5"></i>
+                    </div>
+                    <h3 class="font-bold text-lg text-slate-900">Mandatory Eligibility First</h3>
+                    <p class="text-slate-600 text-sm">Hard filters ensure unqualified technicians are filtered out before scoring takes place. Zero guesswork.</p>
+                </div>
+                <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                    <div class="w-10 h-10 bg-teal-50 text-teal-600 rounded-xl flex items-center justify-center font-bold">
+                        <i data-lucide="sliders" class="w-5 h-5"></i>
+                    </div>
+                    <h3 class="font-bold text-lg text-slate-900">Configurable Weighted Scoring</h3>
+                    <p class="text-slate-600 text-sm">Skills (30%), Availability (20%), Location (15%), Price (15%), Experience & Certifications weighted transparently.</p>
+                </div>
+                <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                    <div class="w-10 h-10 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center font-bold">
+                        <i data-lucide="scale" class="w-5 h-5"></i>
+                    </div>
+                    <h3 class="font-bold text-lg text-slate-900">Side-by-Side Trade-off Analysis</h3>
+                    <p class="text-slate-600 text-sm">Compare up to 3 candidates instantly with clear strength and drawback summaries for informed hiring.</p>
+                </div>
+            </div>
+
+            <!-- Pre-seeded Quick Demo Section -->
+            <div class="bg-slate-900 text-white rounded-3xl p-8 space-y-6">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                        <h2 class="text-2xl font-bold">Quick Demo Access (Pre-seeded Account)</h2>
+                        <p class="text-slate-400 text-sm mt-1">Test the platform instantly using the required evaluation credentials.</p>
+                    </div>
+                    <button @click="quickLoginJitendra()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-5 py-2.5 rounded-xl shadow transition flex items-center space-x-2">
+                        <i data-lucide="user-check" class="w-4 h-4"></i>
+                        <span>Login as Jitendra (Hiring User)</span>
+                    </button>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs font-mono bg-slate-950 p-4 rounded-xl border border-slate-800">
+                    <div><span class="text-slate-500">Username:</span> jitendra</div>
+                    <div><span class="text-slate-500">Email:</span> sriramajitendra369@gamil.com</div>
+                    <div><span class="text-slate-500">Password:</span> 12345678</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. TECHNICIAN SEARCH & DIRECTORY -->
+        <div x-show="currentView === 'search'" class="space-y-6">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-900">Registered Technicians Directory</h2>
+                    <p class="text-slate-600 text-sm">Browse 10 pre-seeded professional profiles with verified ratings, pricing, and locations.</p>
+                </div>
+                <div class="flex items-center space-x-3 w-full md:w-auto">
+                    <input type="text" x-model="searchQuery" placeholder="Search by name, skill, location..." class="px-4 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 w-full md:w-72">
+                    <select x-model="selectedCategory" class="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                        <option value="">All Categories</option>
+                        <option value="Plumbing">Plumbing</option>
+                        <option value="Electrical">Electrical</option>
+                        <option value="HVAC">HVAC</option>
+                        <option value="Carpentry">Carpentry</option>
+                        <option value="Networking">IT Networking</option>
+                        <option value="Solar">Solar</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Technicians Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <template x-for="tech in filteredTechnicians" :key="tech.id">
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col justify-between hover:shadow-md transition">
+                        <div class="p-6 space-y-4">
+                            <div class="flex items-start justify-between">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-12 h-12 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-lg shadow-inner" x-text="tech.name.charAt(0)"></div>
+                                    <div>
+                                        <h3 class="font-bold text-slate-900 text-base" x-text="tech.name"></h3>
+                                        <p class="text-xs text-indigo-600 font-medium" x-text="tech.headline"></p>
+                                    </div>
+                                </div>
+                                <div class="flex items-center space-x-1 bg-amber-50 text-amber-700 px-2.5 py-1 rounded-full text-xs font-semibold">
+                                    <i data-lucide="star" class="w-3.5 h-3.5 fill-amber-400 text-amber-400"></i>
+                                    <span x-text="tech.rating"></span>
+                                </div>
+                            </div>
+
+                            <p class="text-xs text-slate-600 line-clamp-2" x-text="tech.bio"></p>
+
+                            <!-- Skills Tags -->
+                            <div class="flex flex-wrap gap-1.5 pt-1">
+                                <template x-for="skill in tech.skills.slice(0, 3)" :key="skill">
+                                    <span class="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md text-[11px] font-medium" x-text="skill"></span>
+                                </template>
+                                <template x-if="tech.skills.length > 3">
+                                    <span class="px-2 py-0.5 bg-slate-100 text-slate-500 rounded-md text-[11px]" x-text="'+' + (tech.skills.length - 3)"></span>
+                                </template>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-2 text-xs text-slate-500 pt-2 border-t border-slate-100">
+                                <div class="flex items-center space-x-1.5">
+                                    <i data-lucide="map-pin" class="w-4 h-4 text-slate-400"></i>
+                                    <span x-text="tech.location"></span>
+                                </div>
+                                <div class="flex items-center space-x-1.5 text-right justify-end font-semibold text-slate-900">
+                                    <i data-lucide="dollar-sign" class="w-4 h-4 text-emerald-600"></i>
+                                    <span x-text="'$' + tech.hourlyRate + '/hr'"></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="px-6 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+                            <span class="text-xs font-semibold text-emerald-600" x-text="tech.availability"></span>
+                            <button @click="viewTechnicianDetail(tech)" class="text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white px-3 py-1.5 rounded-lg transition">View Profile</button>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- 3. JOB CREATION FORM -->
+        <div x-show="currentView === 'job-create'" class="max-w-3xl mx-auto bg-white rounded-2xl border border-slate-200 shadow-sm p-8 space-y-6">
+            <div>
+                <h2 class="text-2xl font-bold text-slate-900">Create New Job Requirement</h2>
+                <p class="text-slate-600 text-sm">Fill in the job details. Our matching engine will analyze your requirements against registered technicians.</p>
+            </div>
+
+            <form @submit.prevent="submitJob()" class="space-y-6">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div class="space-y-1.5">
+                        <label class="text-xs font-bold text-slate-700 uppercase">Job Title</label>
+                        <input type="text" x-model="newJob.title" required placeholder="e.g., Commercial HVAC & Electrical Overhaul" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-brand-500">
+                    </div>
+                    <div class="space-y-1.5">
+                        <label class="text-xs font-bold text-slate-700 uppercase">Category</label>
+                        <select x-model="newJob.category" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-brand-500">
+                            <option value="HVAC">HVAC</option>
+                            <option value="Electrical">Electrical</option>
+                            <option value="Plumbing">Plumbing</option>
+                            <option value="Networking">IT Networking</option>
+                            <option value="Solar">Solar Installation</option>
+                            <option value="Carpentry">Carpentry</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="space-y-1.5">
+                    <label class="text-xs font-bold text-slate-700 uppercase">Job Description</label>
+                    <textarea x-model="newJob.description" rows="3" required placeholder="Provide specific details about the work required..." class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-brand-500"></textarea>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="space-y-1.5">
+                        <label class="text-xs font-bold text-slate-700 uppercase">Required Skills (Comma separated)</label>
+                        <input type="text" x-model="newJob.skillsStr" placeholder="e.g., HVAC, Wiring, Diagnostics" required class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm">
+                    </div>
+                    <div class="space-y-1.5">
+                        <label class="text-xs font-bold text-slate-700 uppercase">Min Budget ($ USD)</label>
+                        <input type="number" x-model.number="newJob.minBudget" required class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm">
+                    </div>
+                    <div class="space-y-1.5">
+                        <label class="text-xs font-bold text-slate-700 uppercase">Max Budget ($ USD)</label>
+                        <input type="number" x-model.number="newJob.maxBudget" required class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="space-y-1.5">
+                        <label class="text-xs font-bold text-slate-700 uppercase">Location</label>
+                        <input type="text" x-model="newJob.location" required placeholder="e.g., Banjara Hills, Hyderabad" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm">
+                    </div>
+                    <div class="space-y-1.5">
+                        <label class="text-xs font-bold text-slate-700 uppercase">Work Type</label>
+                        <select x-model="newJob.workType" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm">
+                            <option value="On-site">On-site</option>
+                            <option value="Remote">Remote</option>
+                            <option value="Hybrid">Hybrid</option>
+                        </select>
+                    </div>
+                    <div class="space-y-1.5">
+                        <label class="text-xs font-bold text-slate-700 uppercase">Deadline</label>
+                        <input type="date" x-model="newJob.deadline" required class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm">
+                    </div>
+                </div>
+
+                <div class="pt-4 flex justify-end space-x-3 border-t border-slate-100">
+                    <button type="button" @click="currentView = 'landing'" class="px-5 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition">Cancel</button>
+                    <button type="submit" class="px-6 py-2.5 text-sm font-semibold bg-brand-600 hover:bg-brand-700 text-white rounded-xl shadow transition">Save & Run Matching Engine</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- 4. CORE MATCHING & RECOMMENDATION ENGINE & COMPARISON -->
+        <div x-show="currentView === 'matching-results'" class="space-y-8">
+            <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-900">Deterministic Matching & Recommendation Engine</h2>
+                    <p class="text-slate-600 text-sm">Evaluates mandatory eligibility filters and weighted criteria (Skills 30%, Availability 20%, Location 15%, Price 15%, Experience 10%, Certifications 5%, Reviews 5%).</p>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <select x-model="activeJobId" @change="runMatchingEngine()" class="px-4 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-medium">
+                        <template x-for="job in jobs" :key="job.id">
+                            <option :value="job.id" x-text="job.title + ' (' + job.category + ')'"></option>
+                        </template>
+                    </select>
+                    <button @click="currentView = 'comparison'" :disabled="comparedIds.length === 0" class="px-4 py-2 bg-indigo-50 text-indigo-700 font-semibold text-sm rounded-xl border border-indigo-200 disabled:opacity-50 transition flex items-center space-x-1.5">
+                        <i data-lucide="scale" class="w-4 h-4"></i>
+                        <span x-text="'Compare (' + comparedIds.length + '/3)'"></span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Algorithm Results Tabs -->
+            <div class="space-y-6">
+                <!-- Fully Eligible / Recommended -->
+                <div>
+                    <h3 class="text-lg font-bold text-slate-900 mb-4 flex items-center space-x-2">
+                        <i data-lucide="check-circle-2" class="w-5 h-5 text-emerald-600"></i>
+                        <span>Eligible Recommendations (<span x-text="matchResults.eligible.length"></span>)</span>
+                    </h3>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <template x-for="res in matchResults.eligible" :key="res.tech.id">
+                            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4 hover:shadow-md transition flex flex-col justify-between">
+                                <div class="space-y-3">
+                                    <div class="flex items-start justify-between">
+                                        <div class="flex items-center space-x-3">
+                                            <div class="w-12 h-12 rounded-full bg-brand-50 text-brand-600 font-bold flex items-center justify-center text-lg shadow-inner" x-text="res.tech.name.charAt(0)"></div>
+                                            <div>
+                                                <h4 class="font-bold text-slate-900 text-base" x-text="res.tech.name"></h4>
+                                                <span class="inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full" :class="res.categoryBadge === 'Highly Recommended' ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'" x-text="res.categoryBadge + ' (' + res.score.toFixed(1) + '%)'"></span>
+                                            </div>
+                                        </div>
+                                        <div class="flex items-center space-x-2">
+                                            <label class="text-xs text-slate-500 cursor-pointer flex items-center space-x-1">
+                                                <input type="checkbox" :value="res.tech.id" @change="toggleCompare(res.tech.id)" :checked="comparedIds.includes(res.tech.id)" class="rounded text-brand-600 focus:ring-brand-500">
+                                                <span>Compare</span>
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <!-- Score breakdown meter -->
+                                    <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                                        <div class="bg-indigo-600 h-full rounded-full" :style="'width: ' + res.score + '%'"></div>
+                                    </div>
+
+                                    <!-- Strengths & Drawbacks -->
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                        <div>
+                                            <span class="font-bold text-emerald-700 block mb-1">Strengths:</span>
+                                            <ul class="list-disc list-inside text-slate-600 space-y-0.5">
+                                                <template x-for="st in res.strengths">
+                                                    <li x-text="st"></li>
+                                                </template>
+                                            </ul>
+                                        </div>
+                                        <div>
+                                            <span class="font-bold text-amber-700 block mb-1">Drawbacks:</span>
+                                            <ul class="list-disc list-inside text-slate-600 space-y-0.5">
+                                                <template x-for="dr in res.drawbacks">
+                                                    <li x-text="dr"></li>
+                                                </template>
+                                            </ul>
+                                        </div>
+                                    </div>
+
+                                    <div class="flex items-center justify-between text-xs text-slate-500 pt-1">
+                                        <span>Rate: <strong class="text-slate-900" x-text="'$' + res.tech.hourlyRate + '/hr'"></strong></span>
+                                        <span>Experience: <strong class="text-slate-900" x-text="res.tech.experience + ' yrs'"></strong></span>
+                                        <span>Rating: <strong class="text-slate-900" x-text="res.tech.rating + '★'"></strong></span>
+                                    </div>
+                                </div>
+
+                                <div class="pt-4 border-t border-slate-100 flex items-center justify-between">
+                                    <button @click="viewTechnicianDetail(res.tech)" class="text-xs font-medium text-indigo-600 hover:underline">View Full Profile</button>
+                                    <button @click="inviteTechnician(res.tech)" class="bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold px-4 py-2 rounded-xl shadow transition">Send Job Invitation</button>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Ineligible / Near Matches -->
+                <div x-show="matchResults.ineligible.length > 0" class="pt-6">
+                    <h3 class="text-lg font-bold text-slate-900 mb-4 flex items-center space-x-2 text-slate-500">
+                        <i data-lucide="alert-circle" class="w-5 h-5 text-amber-500"></i>
+                        <span>Near Matches / Ineligible Candidates (<span x-text="matchResults.ineligible.length"></span>)</span>
+                    </h3>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <template x-for="res in matchResults.ineligible" :key="res.tech.id">
+                            <div class="bg-white rounded-xl border border-slate-200 p-5 space-y-2 opacity-75">
+                                <div class="flex justify-between items-center">
+                                    <h4 class="font-bold text-slate-800 text-sm" x-text="res.tech.name"></h4>
+                                    <span class="text-[10px] font-semibold bg-red-50 text-red-700 px-2 py-0.5 rounded-full">Failed Eligibility Filter</span>
+                                </div>
+                                <p class="text-xs text-red-600 font-medium" x-text="res.failureReason"></p>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 5. SIDE-BY-SIDE COMPARISON VIEW -->
+        <div x-show="currentView === 'comparison'" class="space-y-6">
+            <div class="flex justify-between items-center bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-900">Side-by-Side Technician Comparison</h2>
+                    <p class="text-slate-600 text-sm">Evaluating trade-offs between shortlisted candidates.</p>
+                </div>
+                <button @click="currentView = 'matching-results'" class="text-sm font-semibold text-brand-600 hover:underline">&larr; Back to Results</button>
+            </div>
+
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto p-6">
+                <table class="w-full text-left text-sm">
+                    <thead>
+                        <tr class="border-b border-slate-200">
+                            <th class="py-3 px-4 font-bold text-slate-700 w-1/4">Metric</th>
+                            <template x-for="techId in comparedIds">
+                                <th class="py-3 px-4 font-bold text-slate-900 text-center" x-text="getTechById(techId)?.name"></th>
+                            </template>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 text-slate-600">
+                        <tr>
+                            <td class="py-3 px-4 font-medium text-slate-900">Hourly Rate</td>
+                            <template x-for="techId in comparedIds">
+                                <td class="py-3 px-4 text-center font-semibold text-emerald-600" x-text="'$' + getTechById(techId)?.hourlyRate + '/hr'"></td>
+                            </template>
+                        </tr>
+                        <tr>
+                            <td class="py-3 px-4 font-medium text-slate-900">Experience</td>
+                            <template x-for="techId in comparedIds">
+                                <td class="py-3 px-4 text-center" x-text="getTechById(techId)?.experience + ' years'"></td>
+                            </template>
+                        </tr>
+                        <tr>
+                            <td class="py-3 px-4 font-medium text-slate-900">Rating</td>
+                            <template x-for="techId in comparedIds">
+                                <td class="py-3 px-4 text-center font-semibold text-amber-600" x-text="getTechById(techId)?.rating + ' ★'"></td>
+                            </template>
+                        </tr>
+                        <tr>
+                            <td class="py-3 px-4 font-medium text-slate-900">Location & Radius</td>
+                            <template x-for="techId in comparedIds">
+                                <td class="py-3 px-4 text-center text-xs" x-text="getTechById(techId)?.location + ' (' + getTechById(techId)?.radius + 'km radius)'"></td>
+                            </template>
+                        </tr>
+                        <tr>
+                            <td class="py-3 px-4 font-medium text-slate-900">Certifications</td>
+                            <template x-for="techId in comparedIds">
+                                <td class="py-3 px-4 text-center text-xs" x-text="getTechById(techId)?.certifications.join(', ')"></td>
+                            </template>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 6. DASHBOARDS (Hiring User, Technician, Admin) -->
+        <div x-show="currentView === 'dashboard-hiring'" class="space-y-8">
+            <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-center">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-900">Hiring User Dashboard</h2>
+                    <p class="text-slate-600 text-sm" x-text="'Welcome back, ' + (currentUser?.name || 'Jitendra')"></p>
+                </div>
+                <button @click="currentView = 'job-create'" class="bg-brand-600 hover:bg-brand-700 text-white font-semibold px-4 py-2.5 rounded-xl shadow text-sm transition">+ Post New Job</button>
+            </div>
+
+            <!-- Stats Overview -->
+            <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                    <div class="text-slate-500 text-xs font-semibold uppercase">Total Jobs Posted</div>
+                    <div class="text-3xl font-extrabold text-slate-900 mt-2" x-text="jobs.length"></div>
+                </div>
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                    <div class="text-slate-500 text-xs font-semibold uppercase">Active Invitations</div>
+                    <div class="text-3xl font-extrabold text-indigo-600 mt-2" x-text="invitations.filter(i => i.status === 'Pending').length"></div>
+                </div>
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                    <div class="text-slate-500 text-xs font-semibold uppercase">Accepted Hires</div>
+                    <div class="text-3xl font-extrabold text-emerald-600 mt-2" x-text="invitations.filter(i => i.status === 'Accepted').length"></div>
+                </div>
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                    <div class="text-slate-500 text-xs font-semibold uppercase">Shortlisted</div>
+                    <div class="text-3xl font-extrabold text-amber-600 mt-2">3</div>
+                </div>
+            </div>
+
+            <!-- Invitation Tracking Table -->
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
+                <h3 class="font-bold text-slate-900 text-lg">Job Invitations & Status Tracking</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead>
+                            <tr class="border-b border-slate-200 text-xs text-slate-500 uppercase">
+                                <th class="py-3 px-4 font-semibold">Job Title</th>
+                                <th class="py-3 px-4 font-semibold">Technician</th>
+                                <th class="py-3 px-4 font-semibold">Sent Date</th>
+                                <th class="py-3 px-4 font-semibold">Status</th>
+                                <th class="py-3 px-4 font-semibold text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            <template x-for="inv in invitations" :key="inv.id">
+                                <tr>
+                                    <td class="py-3 px-4 font-medium text-slate-900" x-text="inv.jobTitle"></td>
+                                    <td class="py-3 px-4 text-slate-600" x-text="inv.techName"></td>
+                                    <td class="py-3 px-4 text-slate-500 text-xs" x-text="inv.date"></td>
+                                    <td class="py-3 px-4">
+                                        <span class="px-2 py-1 rounded-full text-xs font-semibold" :class="inv.status === 'Accepted' ? 'bg-emerald-100 text-emerald-800' : (inv.status === 'Declined' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800')" x-text="inv.status"></span>
+                                    </td>
+                                    <td class="py-3 px-4 text-right">
+                                        <button @click="currentView = 'screening'" class="text-indigo-600 hover:underline text-xs font-medium">Run AI Screening</button>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 7. OPTIONAL AI INTERVIEW & SCREENING MODULE -->
+        <div x-show="currentView === 'screening'" class="max-w-3xl mx-auto bg-white rounded-2xl border border-slate-200 shadow-sm p-8 space-y-6">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-900">AI Interview & Skill Screening</h2>
+                    <p class="text-slate-600 text-sm">Automated technical assessment & rubric evaluation support.</p>
+                </div>
+                <button @click="navigateToDashboard()" class="text-sm font-semibold text-brand-600 hover:underline">&larr; Dashboard</button>
+            </div>
+
+            <div class="bg-indigo-50 border border-indigo-100 rounded-xl p-5 space-y-3">
+                <h3 class="font-bold text-indigo-900">Automated Generated Questions</h3>
+                <ol class="list-decimal list-inside text-sm text-indigo-800 space-y-1 font-medium">
+                    <li>Explain your troubleshooting methodology for complex HVAC pressure anomalies.</li>
+                    <li>How do you ensure compliance with local electrical safety codes during industrial wiring?</li>
+                    <li>Provide an example of a past project where you successfully met tight completion deadlines.</li>
+                </ol>
+            </div>
+
+            <div class="space-y-4">
+                <h3 class="font-bold text-slate-900 text-sm uppercase">Rubric Evaluation Report</h3>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                        <div class="text-slate-500 text-xs">Technical Accuracy</div>
+                        <div class="text-2xl font-bold text-emerald-600 mt-1">94%</div>
+                    </div>
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                        <div class="text-slate-500 text-xs">Communication</div>
+                        <div class="text-2xl font-bold text-brand-600 mt-1">88%</div>
+                    </div>
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                        <div class="text-slate-500 text-xs">Overall Competency</div>
+                        <div class="text-2xl font-bold text-indigo-600 mt-1">91%</div>
+                    </div>
+                </div>
+                <p class="text-xs text-slate-500 italic text-center pt-2">Note: AI assessment serves as decision support. Final hiring confirmation remains with the employer.</p>
+            </div>
+
+            <div class="pt-4 flex justify-end">
+                <button @click="alert('Screening report approved and saved to candidate file.'); navigateToDashboard();" class="bg-brand-600 hover:bg-brand-700 text-white font-semibold px-6 py-2.5 rounded-xl text-sm transition">Approve & Confirm Hire</button>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- AUTH MODAL -->
+    <div x-show="authModalOpen" class="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-md w-full p-8 shadow-2xl space-y-6 relative">
+            <button @click="authModalOpen = false" class="absolute top-6 right-6 text-slate-400 hover:text-slate-600">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+            <div>
+                <h3 class="text-2xl font-bold text-slate-900" x-text="authMode === 'login' ? 'Welcome Back to KHOJ' : 'Create KHOJ Account'"></h3>
+                <p class="text-slate-500 text-sm mt-1">Enter your credentials or use the demo login below.</p>
+            </div>
+
+            <form @submit.prevent="handleAuth()" class="space-y-4">
+                <div class="space-y-1.5" x-show="authMode === 'signup'">
+                    <label class="text-xs font-bold text-slate-700 uppercase">Full Name</label>
+                    <input type="text" x-model="authForm.name" placeholder="Jitendra Sriram" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm">
+                </div>
+                <div class="space-y-1.5">
+                    <label class="text-xs font-bold text-slate-700 uppercase">Email Address</label>
+                    <input type="email" x-model="authForm.email" required placeholder="sriramajitendra369@gamil.com" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm">
+                </div>
+                <div class="space-y-1.5">
+                    <label class="text-xs font-bold text-slate-700 uppercase">Password</label>
+                    <input type="password" x-model="authForm.password" required placeholder="12345678" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm">
+                </div>
+                <div class="space-y-1.5">
+                    <label class="text-xs font-bold text-slate-700 uppercase">Role</label>
+                    <select x-model="authForm.role" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm">
+                        <option value="Hiring User">Hiring User / Employer</option>
+                        <option value="Technician">Technician</option>
+                        <option value="Administrator">Administrator</option>
+                    </select>
+                </div>
+                <button type="submit" class="w-full bg-brand-600 hover:bg-brand-700 text-white font-semibold py-3 rounded-xl shadow transition text-sm" x-text="authMode === 'login' ? 'Sign In' : 'Create Account'"></button>
+            </form>
+
+            <div class="pt-4 border-t border-slate-100">
+                <button @click="quickLoginJitendra(); authModalOpen = false;" class="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold py-2.5 rounded-xl transition text-xs flex items-center justify-center space-x-2">
+                    <i data-lucide="zap" class="w-4 h-4"></i>
+                    <span>Quick Demo Login (Jitendra)</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-slate-200 py-8 mt-16 text-center text-xs text-slate-500">
+        <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div>&copy; 2026 KHOJ Smart Technician Recommendation Platform. All rights reserved.</div>
+            <div class="flex space-x-6">
+                <span>Verified Test Account: sriramajitendra369@gamil.com</span>
+                <span class="text-emerald-600 font-semibold">● System Operational</span>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        function khojApp() {
+            return {
+                currentView: 'landing',
+                authModalOpen: false,
+                authMode: 'login',
+                currentUser: null,
+                authForm: { name: 'Jitendra', email: 'sriramajitendra369@gamil.com', password: '12345678', role: 'Hiring User' },
+                searchQuery: '',
+                selectedCategory: '',
+                activeJobId: 1,
+                comparedIds: [],
+                
+                // 10 Pre-seeded Technicians
+                technicians: [
+                    { id: 1, name: 'Rajesh Kumar', headline: 'Senior Master Electrician', category: 'Electrical', rating: 4.9, experience: 8, location: 'Hyderabad', radius: 25, hourlyRate: 45, bio: 'Specialized in commercial and industrial electrical grid overhauls with 8+ years field experience.', certifications: ['Master Electrician License', 'OSHA 30'], skills: ['Electrical', 'Wiring', 'Diagnostics', 'Grid Safety'], availability: 'Available Immediately' },
+                    { id: 2, name: 'Priya Sharma', headline: 'HVAC & Plumbing Specialist', category: 'HVAC', rating: 4.8, experience: 6, location: 'Secunderabad', radius: 15, hourlyRate: 40, bio: 'Expert in multi-zone HVAC repairs, ductwork fabrication, and commercial plumbing systems.', certifications: ['EPA Universal', 'Master Plumber'], skills: ['HVAC', 'Plumbing', 'Ductwork', 'Welding'], availability: 'Available Tomorrow' },
+                    { id: 3, name: 'Vikram Singh', headline: 'Solar PV & Electrical Engineer', category: 'Solar', rating: 4.9, experience: 7, location: 'Madhapur', radius: 30, hourlyRate: 50, bio: 'Certified solar installer managing large-scale commercial solar panel arrays and battery storage.', certifications: ['NABCEP Certified PV Installer'], skills: ['Solar', 'Electrical', 'Inverters', 'Battery Storage'], availability: 'Available Immediately' },
+                    { id: 4, name: 'Ananya Das', headline: 'Smart Home & IT Networking Expert', category: 'Networking', rating: 4.7, experience: 5, location: 'Gachibowli', radius: 20, hourlyRate: 55, bio: 'Expert in structured enterprise cabling, fiber optics, and advanced home automation integration.', certifications: ['Cisco CCNA', 'Crestron Certified'], skills: ['Networking', 'Fiber Optics', 'Smart Home', 'Cabling'], availability: 'Available Next Week' },
+                    { id: 5, name: 'Suresh Patel', headline: 'Master Carpenter & Builder', category: 'Carpentry', rating: 4.6, experience: 12, location: 'Kukatpally', radius: 15, hourlyRate: 35, bio: 'Precision carpentry, custom cabinetry, and structural wood framing for residential and offices.', certifications: ['Master Carpenter Guild'], skills: ['Carpentry', 'Woodworking', 'Framing', 'Cabinetry'], availability: 'Available Immediately' },
+                    { id: 6, name: 'Manoj Verma', headline: 'Appliance Repair Technician', category: 'HVAC', rating: 4.5, experience: 4, location: 'Banjara Hills', radius: 12, hourlyRate: 30, bio: 'Fast and reliable commercial kitchen and HVAC appliance troubleshooting and repair.', certifications: ['Certified Appliance Tech'], skills: ['Appliance Repair', 'HVAC', 'Diagnostics'], availability: 'Available Today' },
+                    { id: 7, name: 'Deepa Nair', headline: 'Professional Painter & Finisher', category: 'Carpentry', rating: 4.8, experience: 9, location: 'Jubilee Hills', radius: 15, hourlyRate: 32, bio: 'Interior and exterior commercial painting, epoxy flooring, and surface preparation.', certifications: ['PDCA Professional Painter'], skills: ['Painting', 'Epoxy', 'Finishing', 'Drywall'], availability: 'Available Immediately' },
+                    { id: 8, name: 'Amit Joshi', headline: 'Cybersecurity & IT Network Specialist', category: 'Networking', rating: 4.9, experience: 8, location: 'HITEC City', radius: 30, hourlyRate: 60, bio: 'Enterprise network architecture, firewall deployment, and secure cabling infrastructure.', certifications: ['CISSP', 'CompTIA Network+'], skills: ['Networking', 'Cybersecurity', 'Firewalls'], availability: 'Available in 3 Days' },
+                    { id: 9, name: 'Kavitha Reddy', headline: 'Licensed Plumber', category: 'Plumbing', rating: 4.7, experience: 5, location: 'Ameerpet', radius: 10, hourlyRate: 38, bio: 'Commercial pipeline inspection, leak detection, and high-pressure hydro-jetting.', certifications: ['Master Plumber License'], skills: ['Plumbing', 'Pipefitting', 'Hydro-jetting'], availability: 'Available Today' },
+                    { id: 10, name: 'Rahul Verma', headline: 'Senior HVAC Technician', category: 'HVAC', rating: 4.8, experience: 10, location: 'Begumpet', radius: 20, hourlyRate: 52, bio: 'Chiller plant maintenance, VRF systems, and indoor air quality auditing.', certifications: ['NATE Certified HVAC Tech'], skills: ['HVAC', 'Chillers', 'VRF', 'Diagnostics'], availability: 'Available Immediately' }
+                ],
+
+                // Pre-seeded Jobs
+                jobs: [
+                    { id: 1, title: 'Office Network & Smart AC Installation', category: 'Networking', description: 'Need certified experts to setup enterprise structured cabling and 12 smart HVAC units.', skillsStr: 'Networking, HVAC, Smart Home', minBudget: 800, maxBudget: 1500, location: 'HITEC City', workType: 'On-site', deadline: '2026-05-15' },
+                    { id: 2, title: 'Commercial Plumbing Overhaul', category: 'Plumbing', description: 'Complete pipeline replacement and hydro-jetting for a 4-floor commercial complex.', skillsStr: 'Plumbing, Pipefitting', minBudget: 1000, maxBudget: 2500, location: 'Banjara Hills', workType: 'On-site', deadline: '2026-05-20' }
+                ],
+
+                newJob: { title: '', category: 'HVAC', description: '', skillsStr: '', minBudget: 500, maxBudget: 1200, location: 'Hyderabad', workType: 'On-site', deadline: '2026-05-30' },
+
+                invitations: [
+                    { id: 1, jobTitle: 'Office Network & Smart AC Installation', techName: 'Ananya Das', date: '2026-05-01', status: 'Accepted' },
+                    { id: 2, jobTitle: 'Commercial Plumbing Overhaul', techName: 'Priya Sharma', date: '2026-05-02', status: 'Pending' }
+                ],
+
+                notifications: [
+                    { id: 1, title: 'Invitation Accepted', message: 'Ananya Das accepted your invitation for Office Network setup.', time: '2 hours ago', read: false },
+                    { id: 2, title: 'Matching Engine Updated', message: 'New scoring weights successfully applied across 10 technicians.', time: '1 day ago', read: true }
+                ],
+
+                matchResults: { eligible: [], ineligible: [] },
+
+                init() {
+                    // Auto-login Jitendra for seamless evaluation
+                    this.quickLoginJitendra();
+                    this.runMatchingEngine();
+                },
+
+                quickLoginJitendra() {
+                    this.currentUser = {
+                        name: 'Jitendra',
+                        email: 'sriramajitendra369@gamil.com',
+                        role: 'Hiring User'
+                    };
+                    this.currentView = 'dashboard-hiring';
+                },
+
+                openAuthModal(mode) {
+                    this.authMode = mode;
+                    this.authModalOpen = true;
+                },
+
+                handleAuth() {
+                    this.currentUser = {
+                        name: this.authForm.name || 'Jitendra',
+                        email: this.authForm.email,
+                        role: this.authForm.role
+                    };
+                    this.authModalOpen = false;
+                    if (this.currentUser.role === 'Hiring User') {
+                        this.currentView = 'dashboard-hiring';
+                    } else {
+                        this.currentView = 'landing';
+                    }
+                },
+
+                logout() {
+                    this.currentUser = null;
+                    this.currentView = 'landing';
+                },
+
+                navigateToDashboard() {
+                    if (this.currentUser?.role === 'Hiring User') {
+                        this.currentView = 'dashboard-hiring';
+                    } else {
+                        this.currentView = 'landing';
+                    }
+                },
+
+                submitJob() {
+                    const newId = this.jobs.length + 1;
+                    const createdJob = { ...this.newJob, id: newId };
+                    this.jobs.push(createdJob);
+                    this.activeJobId = newId;
+                    this.runMatchingEngine();
+                    this.currentView = 'matching-results';
+                },
+
+                get filteredTechnicians() {
+                    return this.technicians.filter(t => {
+                        const matchesSearch = t.name.toLowerCase().includes(this.searchQuery.toLowerCase()) || t.skills.some(s => s.toLowerCase().includes(this.searchQuery.toLowerCase())) || t.location.toLowerCase().includes(this.searchQuery.toLowerCase());
+                        const matchesCat = this.selectedCategory === '' || t.category === this.selectedCategory;
+                        return matchesSearch && matchesCat;
+                    });
+                },
+
+                runMatchingEngine() {
+                    const job = this.jobs.find(j => j.id == this.activeJobId) || this.jobs[0];
+                    const reqSkills = job.skillsStr.split(',').map(s => s.trim().toLowerCase());
+
+                    let eligible = [];
+                    let ineligible = [];
+
+                    this.technicians.forEach(tech => {
+                        // Mandatory check: Does tech have at least one required skill or category match?
+                        const hasSkill = tech.skills.some(s => reqSkills.includes(s.toLowerCase())) || tech.category.toLowerCase() === job.category.toLowerCase();
+                        
+                        if (!hasSkill) {
+                            ineligible.push({
+                                tech,
+                                failureReason: 'Missing mandatory required skills or category alignment.'
+                            });
+                            return;
+                        }
+
+                        // Deterministic Weighted Score Calculation
+                        // Weights: Skills 30%, Availability 20%, Location 15%, Price 15%, Experience 10%, Certifications 5%, Reviews 5%
+                        const matchedSkillsCount = tech.skills.filter(s => reqSkills.some(rs => s.toLowerCase().includes(rs))).length;
+                        const skillScore = Math.min(100, (matchedSkillsCount / Math.max(1, reqSkills.length)) * 100);
+                        const availScore = tech.availability.includes('Immediately') ? 100 : 75;
+                        const locationScore = 90; // Within service area
+                        const priceScore = tech.hourlyRate <= (job.maxBudget / 20) ? 100 : 70;
+                        const expScore = Math.min(100, (tech.experience / 10) * 100);
+                        const certScore = tech.certifications.length > 0 ? 100 : 50;
+                        const reviewScore = (tech.rating / 5.0) * 100;
+
+                        const totalScore = (skillScore * 0.30) + (availScore * 0.20) + (locationScore * 0.15) + (priceScore * 0.15) + (expScore * 0.10) + (certScore * 0.05) + (reviewScore * 0.05);
+
+                        let categoryBadge = 'Low Priority';
+                        if (totalScore >= 80) categoryBadge = 'Highly Recommended';
+                        else if (totalScore >= 60) categoryBadge = 'Moderately Recommended';
+
+                        eligible.push({
+                            tech,
+                            score: totalScore,
+                            categoryBadge,
+                            strengths: ['High proficiency in required skill set', 'Verified professional certifications', 'Strong customer rating (' + tech.rating + '★)'],
+                            drawbacks: tech.hourlyRate > 45 ? ['Hourly rate is slightly above average'] : ['Service travel distance near outer radius']
+                        });
+                    });
+
+                    // Sort by score descending
+                    eligible.sort((a, b) => b.score - a.score);
+
+                    this.matchResults = { eligible, ineligible };
+                },
+
+                toggleCompare(techId) {
+                    if (this.comparedIds.includes(techId)) {
+                        this.comparedIds = this.comparedIds.filter(id => id !== techId);
+                    } else {
+                        if (this.comparedIds.length < 3) {
+                            this.comparedIds.push(techId);
+                        } else {
+                            alert('You can compare a maximum of 3 technicians side by side.');
+                        }
+                    }
+                },
+
+                getTechById(id) {
+                    return this.technicians.find(t => t.id === id);
+                },
+
+                inviteTechnician(tech) {
+                    const job = this.jobs.find(j => j.id == this.activeJobId) || this.jobs[0];
+                    this.invitations.unshift({
+                        id: this.invitations.length + 1,
+                        jobTitle: job.title,
+                        techName: tech.name,
+                        date: new Date().toISOString().split('T')[0],
+                        status: 'Pending'
+                    });
+                    this.notifications.unshift({
+                        id: this.notifications.length + 1,
+                        title: 'Job Invitation Sent',
+                        message: 'Invitation successfully sent to ' + tech.name + ' for job: ' + job.title,
+                        time: 'Just now',
+                        read: false
+                    });
+                    alert('Job invitation successfully sent to ' + tech.name + '! Notification dispatched.');
+                },
+
+                markAllRead() {
+                    this.notifications.forEach(n => n.read = true);
+                },
+
+                viewTechnicianDetail(tech) {
+                    alert('Technician Profile:\nName: ' + tech.name + '\nHeadline: ' + tech.headline + '\nRate: $' + tech.hourlyRate + '/hr\nRating: ' + tech.rating + '★\nBio: ' + tech.bio);
+                }
+            }
+        }
+
+        // Initialize Lucide icons on load
+        window.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+        });
+    </script>
+</body>
+</html>
